@@ -76,8 +76,10 @@ yml_parse() {
       for (i=0; i<indent; i++) {
         vn=(vn)(vname[i])("_")
       }
+
+      gsub(/^[ \t]+/, "", $3); 
+      gsub(/[ \t]+$/, "", $3);
       
-      gsub(/\s*#.*$/, "", $3);
       printf("declare %s%s%s=\"%s\"\n", "'$yml_prefix'",vn, $2, $3);
    }'
 }
@@ -346,6 +348,6 @@ pkg_uninstall() {
 
     echo "Sync complete"
     
-    exit   
+    exit
 }
 
