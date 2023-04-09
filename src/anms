@@ -282,6 +282,27 @@ if ping -q -c 1 -W 1 $domain >/dev/null 2>&1; then
         if [[ "$nhash" != "$ohash" ]]; then
             eval $(yml_parse /tmp/manifest.yml)
             
+            echo "Checking for old modules"
+            for dir in "$home"/*; do
+                if [ -d "$dir" ]; then
+                    mod="`basename "$dir"`"
+                    hash=`cat "$home/$mod/hash.md5" 2>/dev/null`
+
+                    if ! [[ " `yml_get modules` " =~ " $mod " ]]; then
+                        for defmod in `yml_get modules`; do
+                            if yml_cmp %s_file_md5 "$hash" "$defmod"; then
+                                echo "Renaming module `basename "$mod"` -> $defmod"
+                                mv "$home/$mod" "$home/$defmod"
+                                
+                                continue 2
+                            fi
+                        done
+                    
+                        pkg_uninstall $mod
+                    fi
+                fi
+            done
+            
             echo "Checking for new/updated modules"
             for mod in `yml_get modules`; do
                 if ! yml_defined %s_condition $mod || eval $(yml_get %s_condition $mod) >/dev/null 2>&1; then
@@ -302,15 +323,6 @@ if ping -q -c 1 -W 1 $domain >/dev/null 2>&1; then
                     fi
                 
                 elif yml_defined %s_condition $mod && [ -d "$home/$mod" ]; then
-                    pkg_uninstall $mod
-                fi
-            done
-            
-            echo "Checking for old modules"
-            for dir in "$home"/*; do
-                mod="`basename "$dir"`"
-
-                if [ -d "$dir" ] && ! [[ " `yml_get modules` " =~ " $mod " ]]; then
                     pkg_uninstall $mod
                 fi
             done
