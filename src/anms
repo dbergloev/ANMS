@@ -271,77 +271,81 @@ pkg_uninstall() {
 ###
 #
 #
-echo "Started at `date '+%Y-%m-%d %H:%M'`"
-echo "Contacting the server $domain"
+{
+    echo "Started at `date '+%Y-%m-%d %H:%M'`"
+    echo "Contacting the server $domain"
 
-if ping -q -c 1 -W 1 $domain >/dev/null 2>&1; then
-    if $webchk $manifest >/dev/null 2>&1 && $webdl $manifest | tee /tmp/manifest.yml | grep -qe '^[\s ]*modules:'; then
-        nhash=`md5sum /tmp/manifest.yml 2>/dev/null | awk '{print $1}'`
-        ohash=`cat "$home/manifest.md5" 2>/dev/null`
-        
-        if [[ "$nhash" != "$ohash" ]]; then
-            eval $(yml_parse /tmp/manifest.yml)
+    if ping -q -c 1 -W 1 $domain >/dev/null 2>&1; then
+        if $webchk $manifest >/dev/null 2>&1 && $webdl $manifest | tee /tmp/manifest.yml | grep -qe '^[\s ]*modules:'; then
+            nhash=`md5sum /tmp/manifest.yml 2>/dev/null | awk '{print $1}'`
+            ohash=`cat "$home/manifest.md5" 2>/dev/null`
             
-            echo "Checking for old modules"
-            for dir in "$home"/*; do
-                if [ -d "$dir" ]; then
-                    mod="`basename "$dir"`"
-                    hash=`cat "$home/$mod/hash.md5" 2>/dev/null`
+            if [[ "$nhash" != "$ohash" ]]; then
+                eval $(yml_parse /tmp/manifest.yml)
+                
+                echo "Checking for old modules"
+                for dir in "$home"/*; do
+                    if [ -d "$dir" ]; then
+                        mod="`basename "$dir"`"
+                        hash=`cat "$home/$mod/hash.md5" 2>/dev/null`
 
-                    if ! [[ " `yml_get modules` " =~ " $mod " ]]; then
-                        for defmod in `yml_get modules`; do
-                            if yml_cmp %s_file_md5 "$hash" "$defmod"; then
-                                echo "Renaming module `basename "$mod"` -> $defmod"
-                                mv "$home/$mod" "$home/$defmod"
-                                
-                                continue 2
-                            fi
-                        done
-                    
-                        pkg_uninstall $mod
+                        if ! [[ " `yml_get modules` " =~ " $mod " ]]; then
+                            for defmod in `yml_get modules`; do
+                                if yml_cmp %s_file_md5 "$hash" "$defmod"; then
+                                    echo "Renaming module `basename "$mod"` -> $defmod"
+                                    mv "$home/$mod" "$home/$defmod"
+                                    
+                                    continue 2
+                                fi
+                            done
+                        
+                            pkg_uninstall $mod
+                        fi
                     fi
-                fi
-            done
-            
-            echo "Checking for new/updated modules"
-            for mod in `yml_get modules`; do
-                if ! yml_defined %s_condition $mod || eval $(yml_get %s_condition $mod) >/dev/null 2>&1; then
-                    hash=`cat "$home/$mod/hash.md5" 2>/dev/null`
-                    
-                    if yml_defined %s_file_path $mod && ! yml_cmp %s_file_md5 "$hash" "$mod"; then
-                        pkgfile="$address/$(yml_get %s_file_path $mod)"
+                done
+                
+                echo "Checking for new/updated modules"
+                for mod in `yml_get modules`; do
+                    if ! yml_defined %s_condition $mod || eval $(yml_get %s_condition $mod) >/dev/null 2>&1; then
+                        hash=`cat "$home/$mod/hash.md5" 2>/dev/null`
                         
-                        if $webchk $pkgfile >/dev/null 2>&1; then
-                            pkg_install $mod $pkgfile
+                        if yml_defined %s_file_path $mod && ! yml_cmp %s_file_md5 "$hash" "$mod"; then
+                            pkgfile="$address/$(yml_get %s_file_path $mod)"
+                            
+                            if $webchk $pkgfile >/dev/null 2>&1; then
+                                pkg_install $mod $pkgfile
+                            
+                            else
+                                echo "No package is defined for the module $mod" >&2
+                            fi
                         
-                        else
-                            echo "No package is defined for the module $mod" >&2
+                        elif ! yml_defined %s_file_path $mod; then
+                            echo "No package is available for the module $mod" >&2
                         fi
                     
-                    elif ! yml_defined %s_file_path $mod; then
-                        echo "No package is available for the module $mod" >&2
+                    elif yml_defined %s_condition $mod && [ -d "$home/$mod" ]; then
+                        pkg_uninstall $mod
                     fi
+                done
                 
-                elif yml_defined %s_condition $mod && [ -d "$home/$mod" ]; then
-                    pkg_uninstall $mod
-                fi
-            done
+                echo $nhash > "$home/manifest.md5"
             
-            echo $nhash > "$home/manifest.md5"
+            else
+                echo "No changes was detected"
+            fi
+            
+            rm /tmp/manifest.yml 2>/dev/null
         
         else
-            echo "No changes was detected"
+            echo "Manifest resource is unavailable" >&2; exit 1
         fi
         
-        rm /tmp/manifest.yml 2>/dev/null
-    
     else
-        echo "Manifest resource is unavailable" >&2; exit 1
+        echo "Connection timed out" >&2; exit 1
     fi
-    
-else
-    echo "Connection timed out" >&2; exit 1
-fi
 
-echo "Sync complete"
+    echo "Sync complete"
+    
+    exit   
+}
 
