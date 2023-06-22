@@ -171,7 +171,7 @@ pkg_install() {
         done
         
         echo -e "\tSetting file permissions"
-        if tar -tf $archive 2>/dev/null | grep -q 'permissions'; then
+        if tar -tf $archive 2>/dev/null | grep -qe '^permissions\b'; then
             for perm in `tar -xf $archive 'permissions' -O` 2> >(grep -v 'Removing lead' >&2); do
                 mpath="$(awk -F: '{print $1}' <<< $perm)"
                 
@@ -218,7 +218,7 @@ pkg_install() {
         fi
         
         echo -e "\tRunning install script"
-        if tar -tf $archive 2>/dev/null | grep -q 'install'; then
+        if tar -tf $archive 2>/dev/null | grep -qe '^install\b'; then
             if ! tar -xf $archive 'install' -O 2> >(grep -v 'Removing lead' >&2) | bash -s -- $arg > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
                 echo -e "\tThe install script failed to run properly" >&2
             fi
@@ -227,7 +227,7 @@ pkg_install() {
         echo -e "\tFinalizing installation"
         echo $hash > "$home/$mod/hash.md5"
         
-        if tar -tf $archive 2>/dev/null | grep -q 'uninstall'; then
+        if tar -tf $archive 2>/dev/null | grep -qe '^uninstall\b'; then
             tar -xf $archive 'uninstall' -O > "$home/$mod/uninstall" 2> >(grep -v 'Removing lead' >&2)
         fi
 
