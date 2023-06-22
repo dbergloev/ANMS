@@ -21,6 +21,10 @@ Each line of the `permissions` file is used to define owner and permission of a 
 
 The `install` and `uninstall` files are optional shell scripts that are executed during installation and removal of a package. 
 
+There is also an optional `pe-install` file that is executed before files are extracted and before `install`. 
+
+The `post-uninstall` is executed after `uninstall` and after files has been removed. 
+
 ## Example
 
 Let's make an example package that will apply a custom `.bashrc`. 
