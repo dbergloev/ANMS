@@ -69,7 +69,7 @@ yml_parse() {
       gsub(/^[ \t]+/, "", $3); 
       gsub(/[ \t]+$/, "", $3);
       gsub("-", "_", $2);
-
+         
       indent = length($1)/2;
       vname[indent] = $2;
       for (i in vname) {
@@ -139,14 +139,14 @@ pkg_install() {
     local mod="$1"
     local file="$2"
     local archive="/tmp/$(basename "$file")"
-    local mperm muid mgid mpath
+    local mperm muid mgid mpath scr
     local arg=install
     local hash
     
     echo "Installing module '$mod'"
     $webdl $file > $archive
     hash=`md5sum $archive 2>/dev/null | awk '{print $1}'`
-
+    
     ANMS_HOME="$home/$mod"
     
     if yml_cmp %s_file_md5 "$hash" "$mod"; then
@@ -156,6 +156,13 @@ pkg_install() {
         elif [ -f "$home/$mod/files.lst" ]; then
             cp "$home/$mod/files.lst" "$home/$mod/files.old.lst"
             arg=update
+        fi
+        
+        echo -e "\tRunning pre-install script"
+        if tar -tf $archive 2>/dev/null | grep -q '^pre-install\b'; then
+            if ! tar -xf $archive 'pre-install' -O 2> >(grep -v 'Removing lead' >&2) | bash -s -- $arg > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
+                echo -e "\tThe pre-install script failed to run properly" >&2
+            fi
         fi
         
         echo -e "\tExtracting files"
@@ -172,7 +179,7 @@ pkg_install() {
         
         echo -e "\tSetting file permissions"
         if tar -tf $archive 2>/dev/null | grep -qe '^permissions\b'; then
-            for perm in `tar -xf $archive 'permissions' -O` 2> >(grep -v 'Removing lead' >&2); do
+            for perm in `tar -xf $archive 'permissions' -O 2> >(grep -v 'Removing lead' >&2)`; do
                 mpath="$(awk -F: '{print $1}' <<< $perm)"
                 
                 if [ -e "$mpath" ]; then
@@ -227,9 +234,11 @@ pkg_install() {
         echo -e "\tFinalizing installation"
         echo $hash > "$home/$mod/hash.md5"
         
-        if tar -tf $archive 2>/dev/null | grep -qe '^uninstall\b'; then
-            tar -xf $archive 'uninstall' -O > "$home/$mod/uninstall" 2> >(grep -v 'Removing lead' >&2)
-        fi
+        for scr in uninstall post-uninstall; do
+		    if tar -tf $archive 2>/dev/null | grep -qe "^$scr\b"; then
+		        tar -xf $archive "$scr" -O > "$home/$mod/$scr" 2> >(grep -v 'Removing lead' >&2)
+		    fi
+		done
 
         rm "$home/$mod/files.old.lst" 2>/dev/null
         rm $archive 2>/dev/null
@@ -247,13 +256,13 @@ pkg_uninstall() {
     local file
     
     echo "Uninstalling module '$mod'"
-
+    
     ANMS_HOME="$home/$mod"
     
-    echo -e "\tRunning uninstall script"
+    echo -e "\tRunning uninstall"
     if [ -f "$home/$mod/uninstall" ]; then
         if ! bash "$home/$mod/uninstall" > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
-            echo -e "\tThe uninstall script failed to run properly" >&2
+            echo -e "\tThe uninstall failed to run properly" >&2
         fi
     fi
     
@@ -271,6 +280,13 @@ pkg_uninstall() {
             rm "/$file" 2>/dev/null
         fi
     done
+    
+    echo -e "\tRunning post-uninstall"
+    if [ -f "$home/$mod/post-uninstall" ]; then
+        if ! bash "$home/$mod/post-uninstall" > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
+            echo -e "\tThe post uninstall failed to run properly" >&2
+        fi
+    fi
     
     echo -e "\tFinalizing module removal"
     rm "$home/$mod"/* 2>/dev/null
@@ -357,4 +373,3 @@ pkg_uninstall() {
     
     exit
 }
-
