@@ -4,6 +4,8 @@
 # Automated Network Module Synchronizer (ANMS)
 #
 
+export ANMS_HOME
+
 declare address="$1"
 declare domain="`sed 's/^[^:]\+:\/\///' <<< $address`"
 declare manifest="$address/manifest.yml"
@@ -143,6 +145,8 @@ pkg_install() {
     echo "Installing module '$mod'"
     $webdl $file > $archive
     hash=`md5sum $archive 2>/dev/null | awk '{print $1}'`
+
+    ANMS_HOME="$home/$mod"
     
     if yml_cmp %s_file_md5 "$hash" "$mod"; then
         if [ ! -d "$home/$mod" ]; then
@@ -242,6 +246,8 @@ pkg_uninstall() {
     local file
     
     echo "Uninstalling module '$mod'"
+
+    ANMS_HOME="$home/$mod"
     
     echo -e "\tRunning uninstall script"
     if [ -f "$home/$mod/uninstall" ]; then
