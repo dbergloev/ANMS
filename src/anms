@@ -13,7 +13,7 @@ declare yml_prefix="yml_"
 declare home="/etc/anms"
 declare webdl webchk
 
-declare -A webkit_dl=( [wget]="wget -qO- " [curl]="curl " )
+declare -A webkit_dl=( [wget]="wget -qO- " [curl]="curl -sS " )
 declare -A webkit_chk=( [wget]="wget -S --spider " [curl]="curl --silent -I " )
 
 ###
@@ -159,20 +159,20 @@ pkg_install() {
         fi
         
         echo -e "\tExtracting files"
-        for file in `tar -tf $archive | grep -ve '^src/$' | grep -e '^src/' | sed 's/^src\///' | tee "$home/$mod/files.lst"`; do
+        for file in `tar -tf $archive 2>/dev/null | grep -ve '^src/$' | grep -e '^src/' | sed 's/^src\///' | tee "$home/$mod/files.lst"`; do
             if grep -qe '/$' <<< "$file"; then
                 if [ ! -d "/$file" ]; then
                     mkdir "/$file"
                 fi
             
             else
-                tar -xf $archive "src/$file" -O > "/$file"
+                tar -xf $archive "src/$file" -O > "/$file" 2> >(grep -v 'Removing lead' >&2)
             fi
         done
         
         echo -e "\tSetting file permissions"
-        if tar -tf $archive | grep -q 'permissions'; then
-            for perm in `tar -xf $archive 'permissions' -O`; do
+        if tar -tf $archive 2>/dev/null | grep -q 'permissions'; then
+            for perm in `tar -xf $archive 'permissions' -O` 2> >(grep -v 'Removing lead' >&2); do
                 mpath="$(awk -F: '{print $1}' <<< $perm)"
                 
                 if [ -e "$mpath" ]; then
@@ -218,8 +218,8 @@ pkg_install() {
         fi
         
         echo -e "\tRunning install script"
-        if tar -tf $archive | grep -q 'install'; then
-            if ! tar -xf $archive 'install' -O | bash -s -- $arg > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
+        if tar -tf $archive 2>/dev/null | grep -q 'install'; then
+            if ! tar -xf $archive 'install' -O 2> >(grep -v 'Removing lead' >&2) | bash -s -- $arg > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
                 echo -e "\tThe install script failed to run properly" >&2
             fi
         fi
@@ -227,8 +227,8 @@ pkg_install() {
         echo -e "\tFinalizing installation"
         echo $hash > "$home/$mod/hash.md5"
         
-        if tar -tf $archive | grep -q 'uninstall'; then
-            tar -xf $archive 'uninstall' -O > "$home/$mod/uninstall"
+        if tar -tf $archive 2>/dev/null | grep -q 'uninstall'; then
+            tar -xf $archive 'uninstall' -O > "$home/$mod/uninstall" 2> >(grep -v 'Removing lead' >&2)
         fi
 
         rm "$home/$mod/files.old.lst" 2>/dev/null
