@@ -5,6 +5,7 @@
 #
 
 export ANMS_HOME
+export ANMS_META
 
 declare address="$1"
 declare domain="`sed 's/^[^:]\+:\/\///' <<< $address`"
@@ -148,15 +149,36 @@ pkg_install() {
     hash=`md5sum $archive 2>/dev/null | awk '{print $1}'`
     
     ANMS_HOME="$home/$mod"
+    ANMS_META="$ANMS_HOME/META"
     
     if yml_cmp %s_file_md5 "$hash" "$mod"; then
-        if [ ! -d "$home/$mod" ]; then
-            mkdir "$home/$mod"
+        if [ ! -d "$ANMS_HOME" ]; then
+            mkdir "$ANMS_HOME"
         
-        elif [ -f "$home/$mod/files.lst" ]; then
-            cp "$home/$mod/files.lst" "$home/$mod/files.old.lst"
+        elif [ -f "$ANMS_HOME/files.lst" ]; then
+            if [ -f "$ANMS_HOME/meta-files.lst" ]; then
+                cp "$ANMS_HOME/meta-files.lst" "$ANMS_HOME/meta-files.old.lst"
+            fi
+            
+            cp "$ANMS_HOME/files.lst" "$ANMS_HOME/files.old.lst"
             arg=update
         fi
+        
+        if [ ! -d "$ANMS_META" ]; then
+            mkdir "$ANMS_META"
+        fi
+        
+        echo -e "\tExtracting meta files"
+        for file in `tar -tf $archive 2>/dev/null | grep -ve '^meta/$' | grep -e '^meta/' | sed "s|^meta/|${ANMS_META:1}/|" | tee "$ANMS_HOME/meta-files.lst"`; do
+            if grep -qe '/$' <<< "$file"; then
+                if [ ! -d "/$file" ]; then
+                    mkdir "/$file"
+                fi
+            
+            else
+                tar -xf $archive "$(sed "s|^${ANMS_META:1}/|meta/|" <<< "$file")" -O > "/$file" 2> >(grep -v 'Removing lead' >&2)
+            fi
+        done
         
         echo -e "\tRunning pre-install script"
         if tar -tf $archive 2>/dev/null | grep -q '^pre-install\b'; then
@@ -165,8 +187,8 @@ pkg_install() {
             fi
         fi
         
-        echo -e "\tExtracting files"
-        for file in `tar -tf $archive 2>/dev/null | grep -ve '^src/$' | grep -e '^src/' | sed 's/^src\///' | tee "$home/$mod/files.lst"`; do
+        echo -e "\tExtracting source files"
+        for file in `tar -tf $archive 2>/dev/null | grep -ve '^src/$' | grep -e '^src/' | sed 's/^src\///' | tee "$ANMS_HOME/files.lst"`; do
             if grep -qe '/$' <<< "$file"; then
                 if [ ! -d "/$file" ]; then
                     mkdir "/$file"
@@ -206,23 +228,26 @@ pkg_install() {
         fi
         
         echo -e "\tRemoving old files"
-        if [ -f "$home/$mod/files.old.lst" ]; then
-            for file in `tac "$home/$mod/files.old.lst"`; do
-                if ! grep -qe "^${file}$" "$home/$mod/files.lst"; then
-                    if grep -qe '/$' <<< "$file"; then
-                        if [ -d "/$file" ] && [ -z "$(ls -A "/$file")" ]; then
-                            rmdir "/$file" 2>/dev/null
-                            
+        for prefix in meta-files files; do
+            if [ -f "$ANMS_HOME/$prefix.old.lst" ]; then
+                while read file; do
+                    if ! grep -qe "^${file}$" "$ANMS_HOME/$prefix.lst"; then
+                        if grep -qe '/$' <<< "$file"; then
+                            if [ -d "/$file" ] && [ -z "$(ls -A "/$file")" ]; then
+                                rmdir "/$file" 2>/dev/null
+                                
+                            else
+                                echo -e "\tNot removing '/$file'. Directory is not empty" >&2
+                            fi
+                        
                         else
-                            echo -e "\tNot removing '/$file'. Directory is not empty" >&2
+                            rm "/$file" 2>/dev/null
                         fi
-                    
-                    else
-                        rm "/$file" 2>/dev/null
                     fi
-                fi
-            done
-        fi
+                
+                done < <(tac "$ANMS_HOME/$prefix.old.lst")
+            fi
+        done
         
         echo -e "\tRunning install script"
         if tar -tf $archive 2>/dev/null | grep -qe '^install\b'; then
@@ -232,15 +257,16 @@ pkg_install() {
         fi
         
         echo -e "\tFinalizing installation"
-        echo $hash > "$home/$mod/hash.md5"
+        echo $hash > "$ANMS_HOME/hash.md5"
         
         for scr in uninstall post-uninstall; do
 		    if tar -tf $archive 2>/dev/null | grep -qe "^$scr\b"; then
-		        tar -xf $archive "$scr" -O > "$home/$mod/$scr" 2> >(grep -v 'Removing lead' >&2)
+		        tar -xf $archive "$scr" -O > "$ANMS_HOME/$scr" 2> >(grep -v 'Removing lead' >&2)
 		    fi
 		done
 
-        rm "$home/$mod/files.old.lst" 2>/dev/null
+        rm "$ANMS_HOME/files.old.lst" 2>/dev/null
+        rm "$ANMS_HOME/meta-files.old.lst" 2>/dev/null
         rm $archive 2>/dev/null
     
     else
@@ -258,16 +284,17 @@ pkg_uninstall() {
     echo "Uninstalling module '$mod'"
     
     ANMS_HOME="$home/$mod"
+    ANMS_META="$ANMS_HOME/META"
     
     echo -e "\tRunning uninstall"
-    if [ -f "$home/$mod/uninstall" ]; then
-        if ! bash "$home/$mod/uninstall" > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
+    if [ -f "$ANMS_HOME/uninstall" ]; then
+        if ! bash "$ANMS_HOME/uninstall" > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
             echo -e "\tThe uninstall failed to run properly" >&2
         fi
     fi
     
-    echo -e "\tRemoving files"
-    for file in `tac "$home/$mod/files.lst"`; do
+    echo -e "\tRemoving source files"
+    while read file; do
         if grep -qe '/$' <<< "$file"; then
             if [ -d "/$file" ] && [ -z "$(ls -A "/$file")" ]; then
                 rmdir "/$file" 2>/dev/null
@@ -279,18 +306,36 @@ pkg_uninstall() {
         else
             rm "/$file" 2>/dev/null
         fi
-    done
+        
+    done < <(tac "$ANMS_HOME/files.lst")
     
     echo -e "\tRunning post-uninstall"
-    if [ -f "$home/$mod/post-uninstall" ]; then
-        if ! bash "$home/$mod/post-uninstall" > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
+    if [ -f "$ANMS_HOME/post-uninstall" ]; then
+        if ! bash "$ANMS_HOME/post-uninstall" > >(sed 's/\(.*\)/\t\1/') 2> >(sed 's/\(.*\)/\t\1/' >&2); then
             echo -e "\tThe post uninstall failed to run properly" >&2
         fi
     fi
     
+    echo -e "\tRemoving meta files"
+    while read file; do
+        if grep -qe '/$' <<< "$file"; then
+            if [ -d "/$file" ] && [ -z "$(ls -A "/$file")" ]; then
+                rmdir "/$file" 2>/dev/null
+                
+            else
+                echo -e "\tNot removing '/$file'. Directory is not empty" >&2
+            fi
+        
+        else
+            rm "/$file" 2>/dev/null
+        fi
+        
+    done < <(tac "$ANMS_HOME/meta-files.lst")
+    
     echo -e "\tFinalizing module removal"
-    rm "$home/$mod"/* 2>/dev/null
-    rmdir "$home/$mod" 2>/dev/null
+    rmdir "$ANMS_META" 2>/dev/null
+    rm "$ANMS_HOME"/* 2>/dev/null
+    rmdir "$ANMS_HOME" 2>/dev/null
 }
 
 ###
