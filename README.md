@@ -21,7 +21,7 @@ Each line of the `permissions` file is used to define owner and permission of a 
 
 The `install` and `uninstall` files are optional shell scripts that are executed during installation and removal of a package. 
 
-There is also an optional `pe-install` file that is executed before files are extracted and before `install`. 
+There is also an optional `pre-install` file that is executed before files are extracted and before `install`. 
 
 The `post-uninstall` is executed after `uninstall` and after files has been removed. 
 
@@ -111,6 +111,7 @@ mymodule:
   file:
     path: mymodule.tar.gz
     md5: 526082bc64e3d343bb9bcdc32f9087cc
+  respawn: true
 
 myothermod:
   condition: uname -a | grep 'x86_64'
@@ -124,6 +125,8 @@ The `modules` key defines the enabled packages. Only those defined here will be 
 The rest contains basic information of each package such as a relative file path and the package md5sum, which is used to both validate the downloaded package and to check for updated versions. 
 
 A package may define a `condition` which is a one-line validation command that can be used to include/exclude packages from certain installations. If the condition fails, the package will not be installed on that particular server. 
+
+You may also define the `respawn` option. In the above example the module `mymodule` will be installed after which the entire process will respawn before installing `myothermod`. Let's say that `mymodule` includes an updated version of `anms` with new features and that `myothermod` has been updated to include those features. The current installed version of `anms` will not be able to deal with `myothermod`. But by respawning the process we will be installing `myothermod` using the new `anms` version that was packed with `mymodule` and everything will work just fine.
 
 __Run Sync__
 
