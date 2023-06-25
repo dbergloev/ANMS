@@ -7,6 +7,7 @@
 export ANMS_HOME
 export ANMS_META
 
+declare self="$(readlink -f "$0")"
 declare address="$1"
 declare domain="`sed 's/^[^:]\+:\/\///' <<< $address`"
 declare manifest="$address/manifest.yml"
@@ -384,6 +385,11 @@ pkg_uninstall() {
                             
                             if $webchk $pkgfile >/dev/null 2>&1; then
                                 pkg_install $mod $pkgfile
+                                
+                                if yml_defined %s_respawn $mod && yml_cmp %s_respawn "true" "$mod"; then
+                                    echo "Respawning the process"
+                                    exec bash "$self" "$address"
+                                fi
                             
                             else
                                 echo "No package is defined for the module $mod" >&2
