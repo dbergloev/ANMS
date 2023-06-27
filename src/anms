@@ -9,15 +9,71 @@ export ANMS_META
 export ANMS_LIB_FILE="/tmp/anms.lib.sh"
 
 declare self="$(readlink -f "$0")"
-declare address="$1"
-declare domain="`sed 's/^[^:]\+:\/\///' <<< $address`"
-declare manifest="$address/manifest.yml"
+declare address
+declare domain
+declare manifest
 declare yml_prefix="yml_"
 declare home="/etc/anms"
 declare webdl webchk
+declare forced=0
+declare -a mod_refresh
 
 declare -A webkit_dl=( [wget]="wget -qO- " [curl]="curl -sS " )
 declare -A webkit_chk=( [wget]="wget -S --spider " [curl]="curl --silent -I " )
+
+while true; do
+    if [ -n "$1" ]; then
+        case "${1::1}" in
+            "-") 
+                if [[ "${1::2}" == "--" ]]; then
+                    case "${1:2}" in
+                        "refresh")
+                            shift
+                            mod_refresh+=( "$1" )
+                        ;;
+                        
+                        *)
+                            echo "Unknown option '$1'" >&2; exit 1
+                        ;;
+                    esac
+                
+                else
+                    for ((i=1; i<${#1}; i++)); do
+                        case "${1:$i:1}" in
+                            "h")
+                                echo "Usage: anms [-f ([--refresh <module>] ...)] [ftp/http(s)]://<address>"; exit 0
+                            ;;
+                        
+                            "f")
+                                forced=1
+                            ;;
+                            
+                            *)
+                                echo "Unknown option '-${1:$i:1}'" >&2; exit 1
+                            ;;
+                        esac
+                    done
+                fi
+            ;;
+            
+            *)
+                if [ -z "$address" ]; then
+                    address="$1"
+                    domain="`sed 's/^[^:]\+:\/\///' <<< $address`"
+                    manifest="$address/manifest.yml"
+                    
+                else
+                    echo "Invalid argument length" >&2; exit 1
+                fi
+            ;;
+        esac
+        
+    else
+        break    
+    fi
+    
+    shift
+done
 
 ###
 # Checking environment
@@ -404,7 +460,7 @@ pkg_uninstall() {
             nhash=`md5sum /tmp/manifest.yml 2>/dev/null | awk '{print $1}'`
             ohash=`cat "$home/manifest.md5" 2>/dev/null`
             
-            if [[ "$nhash" != "$ohash" ]]; then
+            if [[ "$nhash" != "$ohash" || $forced -eq 1 ]]; then
                 eval $(yml_parse /tmp/manifest.yml)
                 
                 echo "Checking for old modules"
@@ -433,7 +489,7 @@ pkg_uninstall() {
                     if ! yml_defined %s_condition $mod || eval $(yml_get %s_condition $mod) >/dev/null 2>&1; then
                         hash=`cat "$home/$mod/hash.md5" 2>/dev/null`
                         
-                        if yml_defined %s_file_path $mod && ! yml_cmp %s_file_md5 "$hash" "$mod"; then
+                        if yml_defined %s_file_path $mod && ( ! yml_cmp %s_file_md5 "$hash" "$mod" || [[ " ${mod} " =~ " ${mod_refresh[*]} " ]] ); then
                             pkgfile="$address/$(yml_get %s_file_path $mod)"
                             
                             if $webchk $pkgfile >/dev/null 2>&1; then
