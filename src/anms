@@ -170,7 +170,7 @@ pkg_install() {
         fi
         
         echo -e "\tExtracting meta files"
-        for file in `tar -tf $archive 2>/dev/null | grep -ve '^meta/$' | grep -e '^meta/' | sed "s|^meta/|${ANMS_META:1}/|" | tee "$ANMS_HOME/meta-files.lst"`; do
+        while read file; do
             if grep -qe '/$' <<< "$file"; then
                 if [ ! -d "/$file" ]; then
                     mkdir "/$file"
@@ -179,7 +179,8 @@ pkg_install() {
             else
                 tar -xf $archive "$(sed "s|^${ANMS_META:1}/|meta/|" <<< "$file")" -O > "/$file" 2> >(grep -v 'Removing lead' >&2)
             fi
-        done
+            
+        done < <(tar -tf $archive 2>/dev/null | grep -ve '^meta/$' | grep -e '^meta/' | sed "s|^meta/|${ANMS_META:1}/|" | tee "$ANMS_HOME/meta-files.lst")
         
         echo -e "\tRunning pre-install script"
         if tar -tf $archive 2>/dev/null | grep -q '^pre-install\b'; then
@@ -189,7 +190,7 @@ pkg_install() {
         fi
         
         echo -e "\tExtracting source files"
-        for file in `tar -tf $archive 2>/dev/null | grep -ve '^src/$' | grep -e '^src/' | sed 's/^src\///' | tee "$ANMS_HOME/files.lst"`; do
+        while read file; do
             if grep -qe '/$' <<< "$file"; then
                 if [ ! -d "/$file" ]; then
                     mkdir "/$file"
@@ -198,7 +199,8 @@ pkg_install() {
             else
                 tar -xf $archive "src/$file" -O > "/$file" 2> >(grep -v 'Removing lead' >&2)
             fi
-        done
+            
+        done < <(tar -tf $archive 2>/dev/null | grep -ve '^src/$' | grep -e '^src/' | sed 's/^src\///' | tee "$ANMS_HOME/files.lst")
         
         echo -e "\tSetting file permissions"
         if tar -tf $archive 2>/dev/null | grep -qe '^permissions\b'; then
